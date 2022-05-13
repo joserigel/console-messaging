@@ -8,6 +8,7 @@
 
 
 #define DEFAULT_BUFLEN 512
+#define DEFAULT_PORT "8080"
 /*
     Required libraries {g++}: 
     -lwsock32
@@ -18,6 +19,7 @@ HANDLE hConsole;
 void gotoxy(byte x, byte y) {
     SetConsoleCursorPosition(hConsole, {x, y});
 }
+
 
 bool retry() {
     printf("Try again?[Y/N]");
@@ -39,15 +41,18 @@ int beServer() {
     //Get address info based on hints
     int iResult;
     while (true) {
-        iResult = getaddrinfo(NULL, "8080", &hints, &result);
+        iResult = getaddrinfo(NULL, DEFAULT_PORT, &hints, &result);
         if (iResult != 0) {
-            printf("Getting address info failed at port 8080");
+            printf("Getting address info failed at port %s", DEFAULT_PORT);
             if (!retry()) return 1;
             else continue;
         }
         break;
     }
     system("CLS");
+    
+    char ipv4[INET_ADDRSTRLEN];    
+    inet_ntop(AF_INET, &result->ai_addr, ipv4, INET_ADDRSTRLEN);
 
     //Create ListenSocket
     SOCKET ListenSocket = INVALID_SOCKET;
@@ -65,6 +70,7 @@ int beServer() {
         }
         break;
     }
+    system("CLS");
 
     //Bind Socket
     while (true) {
@@ -86,8 +92,6 @@ int beServer() {
     
     //Listening at Socket
     while (true) {
-        char ipv4[INET_ADDRSTRLEN];    
-        inet_ntop(AF_INET, &result->ai_addr, ipv4, INET_ADDRSTRLEN);
         printf("Currently listening at: %s\n", ipv4);
 
         if (listen(ListenSocket, SOMAXCONN) == SOCKET_ERROR) {
@@ -128,37 +132,137 @@ int beServer() {
     int iSendResult;
 
     do {
-        if (kbhit()) {
-            char inp = getch();
-            if (inp == 'q' || inp == 'Q') break;
-        }
-
         iResult = recv(ClientSocket, recvbuf, recvbuflen, 0);
         if (iResult > 0) {
-            printf("[%s]: %s", client_ip, recvbuf);
+            printf("[%s]: %s ", client_ip, recvbuf);
 
             iSendResult = send(ClientSocket, recvbuf, iResult, 0);
             if (iSendResult == SOCKET_ERROR) {
-                printf(";echo failed\n");
+                printf("; Echo failed\n");
             } else {
                 printf("\n");
             }
+            if (strcmp(recvbuf, "!quit") == 0) break;
         } else if (iResult < 0) {
             printf("An error occured: %ld\n", WSAGetLastError());
-            break;
+            break; 
         }
+        
     } while(true);
     
     //Shutdown and Cleanup
     iResult = shutdown(ClientSocket, SD_SEND);
-    if (iResult == SOCKET_ERROR) printf("Shutdown failed: %d\n", WSAGetLastError());
+    if (iResult == SOCKET_ERROR) 
+        printf("Shutdown failed: %d\n", WSAGetLastError());
     
     closesocket(ClientSocket);
     return 0;
 }
 
 int beClient() {
-    
+    //Initializing of hints (+result pointer)
+    struct addrinfo *result = NULL, hints; 
+    ZeroMemory(&hints, sizeof(hints));
+    hints.ai_family = AF_UNSPEC;
+    hints.ai_socktype = SOCK_STREAM;
+    hints.ai_protocol = IPPROTO_TCP;
+
+    //Get address info
+    int iResult;
+    while (true) {
+        iResult = getaddrinfo("localhost", DEFAULT_PORT, &hints, &result);
+        if (iResult != 0) {
+            printf("getaddrinfo failed: %d\n", iResult);
+            if (!retry()) {
+                WSACleanup();
+                return 1;
+            } else continue;
+        }
+        break;
+    }
+    system("CLS");
+
+    char myip[INET_ADDRSTRLEN];
+    inet_ntop(AF_INET, (struct sockaddr_in *)&result->ai_addr, myip, INET_ADDRSTRLEN);
+    printf("Currently at: %s\n", myip);
+
+    //Establish Connection with a server
+    SOCKET ConnectSocket = INVALID_SOCKET;
+    for (struct addrinfo *ptr=result; true; ptr=ptr->ai_next) {
+        if (ptr == NULL) {
+            printf("No valid socket can be found\n");
+            return 1;
+        }
+        ConnectSocket = socket(
+            ptr->ai_family,
+            ptr->ai_socktype,
+            ptr->ai_protocol
+        );
+
+        char ipv4[INET_ADDRSTRLEN];
+        inet_ntop(AF_INET, (struct sockaddr_in *)&ptr->ai_addr, ipv4, INET_ADDRSTRLEN);
+        printf("Connecting to: %s ", ipv4);
+        if (ConnectSocket == INVALID_SOCKET) {
+            printf("\nSocket failed: %ld\n", WSAGetLastError());
+            system("PAUSE");
+            continue;
+        }
+        
+        iResult = connect(ConnectSocket, ptr->ai_addr, (int)ptr->ai_addrlen);
+        if (iResult == SOCKET_ERROR) {
+            printf("FAILED\n");
+            closesocket(ConnectSocket);
+            ConnectSocket = INVALID_SOCKET;
+            continue;
+        }
+        break;
+    }
+    freeaddrinfo(result);
+    printf("SUCCESS\n");
+
+    if (ConnectSocket == INVALID_SOCKET) {
+        printf("Unable to Connect to server\n");
+        WSACleanup();
+        system("PAUSE");
+        return 1;
+    }
+
+    //Send and receive data
+    char sendbuf[DEFAULT_BUFLEN];
+    char recvbuf[DEFAULT_BUFLEN];
+    int bufsize = DEFAULT_BUFLEN;
+    while (true) {
+        printf("Msg: ");
+        std::cin.getline(sendbuf, sizeof(sendbuf));
+        iResult = send(ConnectSocket, sendbuf, bufsize, 0);
+        if (iResult == SOCKET_ERROR) {
+            printf("SEND FAILED!!! %d\n", WSAGetLastError());
+            break;
+        }
+        
+        iResult = recv(ConnectSocket, recvbuf, bufsize, 0);
+        if (iResult > 0) {
+            printf("Message Received! ");
+            printf((strcmp(sendbuf, recvbuf)==0)? "\n" : "(with error)\n");
+        } else if (iResult == 0) {
+            printf("Message not received\n");
+            break;
+        } else {
+            printf("Recv failed: %d\n", WSAGetLastError());
+            break;
+        }
+
+        if (strcmp(sendbuf, "!quit") == 0) break;
+    }
+
+    //Shutdown and Cleanup
+    iResult = shutdown(ConnectSocket, SD_SEND);
+    if (iResult == SOCKET_ERROR) 
+        printf("shutdown failed: %d\n", WSAGetLastError());
+
+    closesocket(ConnectSocket);
+    return 0;
+
 }
 
 int main() {
@@ -178,7 +282,18 @@ int main() {
     }
     system("CLS");
 
-    int exitCode = beServer();
+    char input;
+    do {
+        system("CLS");
+        printf("[C]lient or [S]erver?");
+        input = getch();
+        printf("\n");
+    } while (input != 'C' && input != 'c' && 
+        input != 'S' && input != 's');
+    system("CLS");
+
+    int exitCode = (input == 'C' || input == 'c')? beClient() : beServer();
+   
     WSACleanup();
     system("PAUSE");
     return exitCode;
