@@ -19,7 +19,6 @@ void gotoxy(byte x, byte y) {
     SetConsoleCursorPosition(hConsole, {x, y});
 }
 
-
 bool retry() {
     printf("Try again?[Y/N]");
     char input = getch();
@@ -28,23 +27,7 @@ bool retry() {
     else return true;
 }
 
-int main() {
-    hConsole = GetStdHandle(STD_OUTPUT_HANDLE);
-
-    //Start of WSA
-    WSAData wsa;
-    int iResult;
-    while(true) {
-        iResult = WSAStartup(MAKEWORD(2,2), &wsa);
-        if (iResult != 0) {
-            printf("WSA Startup Failed: %d\n", iResult);
-            if (!retry()) return 1;
-            else continue;
-        }
-        break;
-    }
-    system("CLS");
-
+int beServer() {
     //initializing of hints and results, but mostly hints
     struct addrinfo *result = NULL, hints;
     ZeroMemory(&hints, sizeof(hints));
@@ -54,6 +37,7 @@ int main() {
     hints.ai_flags = AI_PASSIVE;
 
     //Get address info based on hints
+    int iResult;
     while (true) {
         iResult = getaddrinfo(NULL, "8080", &hints, &result);
         if (iResult != 0) {
@@ -170,7 +154,32 @@ int main() {
     if (iResult == SOCKET_ERROR) printf("Shutdown failed: %d\n", WSAGetLastError());
     
     closesocket(ClientSocket);
+    return 0;
+}
+
+int beClient() {
+    
+}
+
+int main() {
+    hConsole = GetStdHandle(STD_OUTPUT_HANDLE);
+
+    //Start of WSA
+    WSAData wsa;
+    int iResult;
+    while(true) {
+        iResult = WSAStartup(MAKEWORD(2,2), &wsa);
+        if (iResult != 0) {
+            printf("WSA Startup Failed: %d\n", iResult);
+            if (!retry()) return 1;
+            else continue;
+        }
+        break;
+    }
+    system("CLS");
+
+    int exitCode = beServer();
     WSACleanup();
     system("PAUSE");
-    return 0;
+    return exitCode;
 }
