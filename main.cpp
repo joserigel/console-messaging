@@ -51,8 +51,6 @@ int beServer() {
     }
     system("CLS");
     
-    char ipv4[INET_ADDRSTRLEN];    
-    inet_ntop(AF_INET, &result->ai_addr, ipv4, INET_ADDRSTRLEN);
 
     //Create ListenSocket
     SOCKET ListenSocket = INVALID_SOCKET;
@@ -92,7 +90,15 @@ int beServer() {
     
     //Listening at Socket
     while (true) {
-        printf("Currently listening at: %s\n", ipv4);
+        
+        struct sockaddr_in s_in;
+        socklen_t socklen = sizeof(s_in);
+        char ipv4[INET_ADDRSTRLEN];
+        if (getsockname(ListenSocket, (struct sockaddr *) &s_in, &socklen) != -1) {
+            inet_ntop(AF_INET, &s_in.sin_addr, ipv4, INET_ADDRSTRLEN);
+            printf("Listening at: %s", ipv4);
+        }
+
 
         if (listen(ListenSocket, SOMAXCONN) == SOCKET_ERROR) {
             printf("Listening failed with error: %ld\n", WSAGetLastError());
@@ -108,9 +114,12 @@ int beServer() {
     char client_ip[INET_ADDRSTRLEN];
     SOCKET ClientSocket = INVALID_SOCKET;
     while (true) {
-        ClientSocket = accept(ListenSocket, NULL, NULL);
-        getpeername(ClientSocket, result->ai_addr, (int *)&result->ai_addrlen);
-        inet_ntop(AF_INET, &result->ai_addr, client_ip, INET_ADDRSTRLEN);
+        struct sockaddr_in addr;
+        socklen_t addrlen = sizeof(addr);
+        ClientSocket = accept(ListenSocket, (sockaddr*) &addr, &addrlen);
+        
+        inet_ntop(AF_INET, &addr.sin_addr, client_ip, INET_ADDRSTRLEN);
+
         printf("Accepted Client from: %s", client_ip);
         if (ClientSocket == INVALID_SOCKET) {
             printf("Accept failed: %d\n", WSAGetLastError());
@@ -182,10 +191,6 @@ int beClient() {
     }
     system("CLS");
 
-    char myip[INET_ADDRSTRLEN];
-    inet_ntop(AF_INET, (struct sockaddr_in *)&result->ai_addr, myip, INET_ADDRSTRLEN);
-    printf("Currently at: %s\n", myip);
-
     //Establish Connection with a server
     SOCKET ConnectSocket = INVALID_SOCKET;
     for (struct addrinfo *ptr=result; true; ptr=ptr->ai_next) {
@@ -199,9 +204,6 @@ int beClient() {
             ptr->ai_protocol
         );
 
-        char ipv4[INET_ADDRSTRLEN];
-        inet_ntop(AF_INET, (struct sockaddr_in *)&ptr->ai_addr, ipv4, INET_ADDRSTRLEN);
-        printf("Connecting to: %s ", ipv4);
         if (ConnectSocket == INVALID_SOCKET) {
             printf("\nSocket failed: %ld\n", WSAGetLastError());
             system("PAUSE");
@@ -210,7 +212,6 @@ int beClient() {
         
         iResult = connect(ConnectSocket, ptr->ai_addr, (int)ptr->ai_addrlen);
         if (iResult == SOCKET_ERROR) {
-            printf("FAILED\n");
             closesocket(ConnectSocket);
             ConnectSocket = INVALID_SOCKET;
             continue;
@@ -218,7 +219,7 @@ int beClient() {
         break;
     }
     freeaddrinfo(result);
-    printf("SUCCESS\n");
+    
 
     if (ConnectSocket == INVALID_SOCKET) {
         printf("Unable to Connect to server\n");
@@ -226,6 +227,20 @@ int beClient() {
         system("PAUSE");
         return 1;
     }
+    struct sockaddr_in sin;
+    socklen_t sin_len = sizeof(sin);
+    if (getsockname(ConnectSocket, (struct sockaddr*)&sin, &sin_len) != -1) {
+        char ipv4[INET_ADDRSTRLEN];
+        inet_ntop(AF_INET, &sin.sin_addr, ipv4, INET_ADDRSTRLEN);
+        printf("Connected from: %s\n", ipv4);
+    }
+
+    if (getpeername(ConnectSocket, (struct sockaddr*)&sin, &sin_len) != -1) {
+        char ipv4[INET_ADDRSTRLEN];
+        inet_ntop(AF_INET, &sin.sin_addr, ipv4, INET_ADDRSTRLEN);
+        printf("Connected To: %s\n", ipv4);
+    }
+
 
     //Send and receive data
     char sendbuf[DEFAULT_BUFLEN];
@@ -262,7 +277,6 @@ int beClient() {
 
     closesocket(ConnectSocket);
     return 0;
-
 }
 
 int main() {
@@ -282,6 +296,7 @@ int main() {
     }
     system("CLS");
 
+    //User option prompt
     char input;
     do {
         system("CLS");
@@ -295,6 +310,5 @@ int main() {
     int exitCode = (input == 'C' || input == 'c')? beClient() : beServer();
    
     WSACleanup();
-    system("PAUSE");
     return exitCode;
 }
