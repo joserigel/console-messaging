@@ -179,7 +179,10 @@ int beClient() {
     //Get address info
     int iResult;
     while (true) {
-        iResult = getaddrinfo("localhost", DEFAULT_PORT, &hints, &result);
+        char ipv4[INET_ADDRSTRLEN];
+        printf("IP: ");
+        std::cin.getline(ipv4, sizeof(ipv4));
+        iResult = getaddrinfo(ipv4, DEFAULT_PORT, &hints, &result);
         if (iResult != 0) {
             printf("getaddrinfo failed: %d\n", iResult);
             if (!retry()) {
@@ -220,13 +223,14 @@ int beClient() {
     }
     freeaddrinfo(result);
     
-
     if (ConnectSocket == INVALID_SOCKET) {
         printf("Unable to Connect to server\n");
         WSACleanup();
         system("PAUSE");
         return 1;
     }
+
+    //Printing of Server/Client IP
     struct sockaddr_in sin;
     socklen_t sin_len = sizeof(sin);
     if (getsockname(ConnectSocket, (struct sockaddr*)&sin, &sin_len) != -1) {
